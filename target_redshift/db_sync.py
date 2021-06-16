@@ -396,6 +396,16 @@ class DbSync:
         bucket = self.connection_config['s3_bucket']
         self.s3.delete_object(Bucket=bucket, Key=s3_key)
 
+    def move_to_s3(self, s3_key, new_s3_key):
+        self.logger.info("Moving {} to {}".format(s3_key, new_s3_key))
+        bucket = self.connection_config['s3_bucket']
+        copy_source = {
+            'Bucket': bucket,
+            'Key': s3_key
+        }
+        self.s3.copy(copy_source, bucket, new_s3_key)
+        self.s3.delete_object(Bucket=bucket, Key=s3_key)
+
     # pylint: disable=too-many-locals
     def load_csv(self, s3_key, count, size_bytes, compression=False):
         stream_schema_message = self.stream_schema_message

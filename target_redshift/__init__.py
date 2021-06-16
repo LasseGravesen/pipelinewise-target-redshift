@@ -24,6 +24,8 @@ LOGGER = get_logger('target_redshift')
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+DEFAULT_S3_RETAIN_CSV_FILES = False
+DEFAULT_S3_ARCHIVE_PREFIX = 'ARCHIVE/'
 
 
 class RecordValidationException(Exception):
@@ -319,7 +321,7 @@ def flush_streams(
             delete_rows=config.get('hard_delete'),
             compression=config.get('compression'),
             slices=config.get('slices'),
-            temp_dir=config.get('temp_dir')
+            temp_dir=config.get('temp_dir'),
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -425,8 +427,17 @@ def flush_records(stream, records_to_load, row_count, db_sync, compression=None,
     db_sync.load_csv(copy_key, row_count, size_bytes, compression)
     for csv_file in csv_files:
         os.remove(csv_file)
-    for s3_key in s3_keys:
-        db_sync.delete_from_s3(s3_key)
+
+    s3_retain_csv_files = db_sync.connection_config.get('s3_retain_csv_files', DEFAULT_S3_RETAIN_CSV_FILES)
+    s3_archive_prefix = db_sync.connection_config.get('s3_archive_prefix', DEFAULT_S3_ARCHIVE_PREFIX)
+
+    if s3_retain_csv_files:
+        for s3_key in s3_keys:
+            new_s3_key = "{}{}".format(s3_archive_prefix, s3_key)
+            db_sync.move_to_s3(s3_key, new_s3_key)
+    else:
+        for s3_key in s3_keys:
+            db_sync.delete_from_s3(s3_key)
 
 
 def main():
